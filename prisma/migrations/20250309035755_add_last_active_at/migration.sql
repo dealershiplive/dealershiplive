@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Conversation" ADD COLUMN     "lastActiveAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP;

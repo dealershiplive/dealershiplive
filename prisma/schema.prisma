@@ -1,0 +1,284 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          Role      @default(AGENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  client        Client?   @relation(fields: [clientId], references: [id])
+  clientId      String?
+  agentProfile  Agent?
+  supportTickets SupportTicket[] @relation("CreatedBy")
+  ticketMessages TicketMessage[]
+  conversations Conversation[]
+  conversationMessages ConversationMessage[]
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  websiteUrl    String
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)
+  subscriptionEndDate DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Widget configuration
+  widgetColor   String    @default("#4f46e5")
+  widgetCompanyName String?
+  widgetAgentName String?
+  widgetWelcomeMessage String?
+  
+  // Relations
+  users         User[]
+  agents        Agent[]
+  subscriptions Subscription[]
+  supportTickets SupportTicket[]
+  analytics     ClientAnalytics?
+  conversations Conversation[]
+}
+
+model Agent {
+  id            String    @id @default(cuid())
+  isOnline      Boolean   @default(false)
+  lastActive    DateTime  @default(now())
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id])
+  userId        String    @unique
+  client        Client    @relation(fields: [clientId], references: [id])
+  clientId      String
+}
+
+model Subscription {
+  id            String    @id @default(cuid())
+  plan          String    // e.g., "Basic", "Standard", "Premium"
+  status        SubscriptionStatus @default(ACTIVE)
+  startDate     DateTime
+  endDate       DateTime
+  amount        Float
+  paymentStatus PaymentStatus @default(PENDING)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  client        Client    @relation(fields: [clientId], references: [id])
+  clientId      String
+  invoices      Invoice[]
+}
+
+model Invoice {
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique
+  amount        Float
+  status        PaymentStatus @default(PENDING)
+  dueDate       DateTime
+  paidDate      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  subscription  Subscription @relation(fields: [subscriptionId], references: [id])
+  subscriptionId String
+}
+
+model SupportTicket {
+  id            String    @id @default(cuid())
+  subject       String
+  status        TicketStatus @default(OPEN)
+  priority      TicketPriority @default(MEDIUM)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  client        Client    @relation(fields: [clientId], references: [id])
+  clientId      String
+  createdBy     User      @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById   String
+  messages      TicketMessage[]
+  conversationMessages ConversationMessage[]
+}
+
+model TicketMessage {
+  id            String    @id @default(cuid())
+  message       String
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id])
+  ticketId      String
+  sender        User      @relation(fields: [senderId], references: [id])
+  senderId      String
+  senderRole    Role
+}
+
+model ClientAnalytics {
+  id                 String    @id @default(cuid())
+  totalAgents        Int       @default(0)
+  activeAgents       Int       @default(0)
+  totalConversations Int       @default(0)
+  avgResponseTime    Int       @default(0) // in seconds
+  lastUpdated        DateTime  @default(now())
+  
+  // Relations
+  client             Client    @relation(fields: [clientId], references: [id])
+  clientId           String    @unique
+}
+
+model SystemSettings {
+  id                      String    @id @default(cuid())
+  platformName            String    @default("SaaS Support Platform")
+  supportEmail            String    @default("support@example.com")
+  defaultLanguage         String    @default("en")
+  maintenanceMode         Boolean   @default(false)
+  
+  // Security settings
+  passwordMinLength       Int       @default(8)
+  passwordRequireSpecialChar Boolean @default(true)
+  passwordRequireNumber   Boolean   @default(true)
+  passwordRequireUppercase Boolean   @default(true)
+  twoFactorAuthRequired   Boolean   @default(false)
+  sessionTimeout          Int       @default(60) // minutes
+  
+  // API Keys
+  twilioAccountSid        String?
+  twilioAuthToken         String?
+  twilioApiKey            String?
+  twilioApiSecret         String?
+  stripePublishableKey    String?
+  stripeSecretKey         String?
+  
+  // Email Settings
+  smtpHost                String?
+  smtpPort                Int?
+  smtpUsername            String?
+  smtpPassword            String?
+  emailFromName           String?
+  emailFromAddress        String?
+  
+  updatedAt               DateTime  @updatedAt
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  customerName  String?
+  customerEmail String?
+  type          ConversationType
+  status        ConversationStatus @default(WAITING)
+  createdAt     DateTime  @default(now())
+  endedAt       DateTime?
+  lastActiveAt  DateTime? @default(now())
+  
+  // Relations
+  agent         User      @relation(fields: [agentId], references: [id])
+  agentId       String
+  client        Client    @relation(fields: [clientId], references: [id])
+  clientId      String
+  messages      Message[]
+}
+
+model Message {
+  id            String    @id @default(cuid())
+  content       String
+  type          MessageType @default(TEXT)
+  status        MessageStatus @default(SENT)
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  conversation  Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  sender        String    // "agent" or "customer"
+}
+
+model ConversationMessage {
+  id            String    @id @default(cuid())
+  content       String
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id])
+  ticketId      String
+  sender        User      @relation(fields: [senderId], references: [id])
+  senderId      String
+  senderRole    Role
+  messageType   MessageType @default(TEXT)
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN // Keep this for backward compatibility
+  CLIENT_ADMIN
+  AGENT
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  TRIAL
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ConversationType {
+  CHAT
+  CALL
+}
+
+enum ConversationStatus {
+  WAITING
+  ACTIVE
+  ENDED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+  VIDEO_REQUEST
+  VIDEO_ACCEPTED
+  VIDEO_DECLINED
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
